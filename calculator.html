@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Калькулятор | Проект для практики</title>
+    <meta charset="utf-8">
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: system-ui, 'Segoe UI', monospace;
+        }
+        body {
+            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .calculator {
+            background: #0f172a;
+            border-radius: 48px;
+            padding: 24px;
+            box-shadow: 0 25px 40px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.08);
+            width: 100%;
+            max-width: 420px;
+        }
+        .display {
+            background: #0a0f1c;
+            color: #facc15;
+            font-size: 3.5rem;
+            font-weight: 500;
+            text-align: right;
+            padding: 30px 24px;
+            border-radius: 32px;
+            margin-bottom: 28px;
+            word-wrap: break-word;
+            word-break: break-all;
+            letter-spacing: 2px;
+            box-shadow: inset 0 2px 6px rgba(0,0,0,0.6);
+            font-family: 'Courier New', monospace;
+        }
+        .buttons {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+        }
+        button {
+            background: #1e293b;
+            border: none;
+            color: white;
+            font-size: 1.8rem;
+            font-weight: 600;
+            padding: 20px 0;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: 0.1s linear;
+            box-shadow: 0 4px 0 #0a0f1c;
+            font-family: monospace;
+        }
+        button:active {
+            transform: translateY(2px);
+            box-shadow: 0 1px 0 #0a0f1c;
+        }
+        .operator {
+            background: #f59e0b;
+            color: #0f172a;
+            font-size: 2rem;
+        }
+        .clear {
+            background: #dc2626;
+            color: white;
+        }
+        .equal {
+            background: #10b981;
+            color: white;
+            grid-column: span 2;
+        }
+        .zero {
+            grid-column: span 2;
+        }
+    </style>
+</head>
+<body>
+<div class="calculator">
+    <div class="display" id="display">0</div>
+    <div class="buttons">
+        <button class="clear" data-action="clear">AC</button>
+        <button class="operator" data-action="negate">±</button>
+        <button class="operator" data-action="percent">%</button>
+        <button class="operator" data-action="divide">÷</button>
+
+        <button data-number="7">7</button>
+        <button data-number="8">8</button>
+        <button data-number="9">9</button>
+        <button class="operator" data-action="multiply">×</button>
+
+        <button data-number="4">4</button>
+        <button data-number="5">5</button>
+        <button data-number="6">6</button>
+        <button class="operator" data-action="subtract">−</button>
+
+        <button data-number="1">1</button>
+        <button data-number="2">2</button>
+        <button data-number="3">3</button>
+        <button class="operator" data-action="add">+</button>
+
+        <button class="zero" data-number="0">0</button>
+        <button data-number=".">.</button>
+        <button class="equal" data-action="calculate">=</button>
+    </div>
+</div>
+
+<script>
+    (function(){
+        // ---- DOM elements ----
+        const displayEl = document.getElementById('display');
+        const calculator = document.querySelector('.calculator');
+
+        // ---- state ----
+        let currentInput = '0';       // что видим на дисплее
+        let firstOperand = null;       // первое число
+        let waitingForOperand = false; // ждём второе число?
+        let operator = null;            // + - × ÷
+
+        // ---- helper: обновить дисплей ----
+        function updateDisplay() {
+            // красивое отображение: если число очень длинное — показываем как есть
+            if (currentInput.length > 18) {
+                displayEl.textContent = parseFloat(currentInput).toExponential(8);
+            } else {
+                displayEl.textContent = currentInput;
+            }
+        }
+
+        // ---- математика ----
+        function calculateResult(a, op, b) {
+            const num1 = parseFloat(a);
+            const num2 = parseFloat(b);
+            if (isNaN(num1) || isNaN(num2)) return '0';
+
+            switch (op) {
+                case 'add': return (num1 + num2).toString();
+                case 'subtract': return (num1 - num2).toString();
+                case 'multiply': return (num1 * num2).toString();
+                case 'divide':
+                    if (num2 === 0) return 'Ошибка';
+                    return (num1 / num2).toString();
+                default: return b;
+            }
+        }
+
+        // ---- обработка цифр / точки ----
+        function inputNumber(number) {
+            if (waitingForOperand) {
+                currentInput = number;
+                waitingForOperand = false;
+            } else {
+                // запрещаем больше одной точки
+                if (number === '.' && currentInput.includes('.')) return;
+                // убираем ведущий 0, если не ноль и не точка
+                if (currentInput === '0' && number !== '.') {
+                    currentInput = number;
+                } else {
+                    currentInput += number;
+                }
+            }
+            updateDisplay();
+        }
+
+        // ---- сброс всего ----
+        function resetCalculator() {
+            currentInput = '0';
+            firstOperand = null;
+            waitingForOperand = false;
+            operator = null;
+            updateDisplay();
+        }
+
+        // ---- обработка операторов (+, -, ×, ÷) ----
+        function handleOperator(nextOp) {
+            const inputValue = parseFloat(currentInput);
+            if (isNaN(inputValue)) {
+                // если на дисплее ошибка — сбросим
+                resetCalculator();
+                return;
+            }
+
+            // первое число ещё не сохранено → сохраняем текущее
+            if (firstOperand === null) {
+                firstOperand = currentInput;
+            } 
+            // если оператор уже был, но мы сейчас ввели второе число — вычисляем
+            else if (operator && !waitingForOperand) {
+                const result = calculateResult(firstOperand, operator, currentInput);
+                if (result === 'Ошибка') {
+                    displayEl.textContent = 'Ошибка';
+                    currentInput = '0';
+                    firstOperand = null;
+                    operator = null;
+                    waitingForOperand = true;
+                    return;
+                }
+                currentInput = result;
+                firstOperand = result;
+                updateDisplay();
+            }
+
+            waitingForOperand = true;
+            operator = nextOp;
+        }
+
+        // ---- обработка = ----
+        function handleEqual() {
+            if (operator === null || waitingForOperand) return;
+            const result = calculateResult(firstOperand, operator, currentInput);
+            if (result === 'Ошибка') {
+                displayEl.textContent = 'Ошибка';
+                currentInput = '0';
+                firstOperand = null;
+                operator = null;
+                waitingForOperand = true;
+                return;
+            }
+            currentInput = result;
+            firstOperand = null;
+            operator = null;
+            waitingForOperand = true;
+            updateDisplay();
+        }
+
+        // ---- процент, смена знака ----
+        function handleSpecial(action) {
+            let num = parseFloat(currentInput);
+            if (isNaN(num)) {
+                resetCalculator();
+                return;
+            }
+            if (action === 'percent') {
+                num = num / 100;
+                currentInput = num.toString();
+                updateDisplay();
+                if (!waitingForOperand && operator !== null) {
+                    // процент работает как часть текущего числа
+                }
+            } else if (action === 'negate') {
+                num = -num;
+                currentInput = num.toString();
+                updateDisplay();
+            }
+        }
+
+        // ---- главный обработчик кликов (делегирование) ----
+        calculator.addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+
+            // цифры и десятичная точка
+            if (btn.hasAttribute('data-number')) {
+                const val = btn.getAttribute('data-number');
+                inputNumber(val);
+                return;
+            }
+
+            // действия (clear, операторы, равно, спец)
+            const action = btn.getAttribute('data-action');
+            if (!action) return;
+
+            if (action === 'clear') {
+                resetCalculator();
+            }
+            else if (action === 'calculate') {
+                handleEqual();
+            }
+            else if (action === 'add' || action === 'subtract' || action === 'multiply' || action === 'divide') {
+                handleOperator(action);
+            }
+            else if (action === 'percent' || action === 'negate') {
+                handleSpecial(action);
+            }
+        });
+
+        // стартовое состояние
+        resetCalculator();
+    })();
+</script>
+</body>
+</html>
